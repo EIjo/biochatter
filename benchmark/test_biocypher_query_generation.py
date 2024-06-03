@@ -1,9 +1,11 @@
 import re
 import json
 import inspect
-
+from dotenv import load_dotenv
 import pytest
+from typing import Optional
 
+from biochatter.llm_connect import Conversation
 from biochatter.prompts import BioCypherPromptEngine
 from .conftest import calculate_bool_vector_score
 from .benchmark_utils import (
@@ -12,6 +14,7 @@ from .benchmark_utils import (
     write_results_to_file,
 )
 
+load_dotenv()
 
 def test_naive_query_generation_using_schema(
     model_name,
@@ -70,6 +73,7 @@ def test_naive_query_generation_using_schema(
 def get_prompt_engine(
     kg_schema_dict: dict,
     create_prompt_engine,
+    conversation_factory: Optional[Conversation] = None
 ) -> BioCypherPromptEngine:
     """Helper function to create the prompt engine for the test.
 
@@ -80,7 +84,7 @@ def get_prompt_engine(
     Returns:
         BioCypherPromptEngine: The prompt engine for the test
     """
-    return create_prompt_engine(kg_schema_dict=kg_schema_dict)
+    return create_prompt_engine(kg_schema_dict=kg_schema_dict,conversation_factory=conversation_factory)
 
 
 def test_entity_selection(
@@ -329,8 +333,11 @@ def test_end_to_end_query_generation(
     skip_if_already_run(
         model_name=model_name, task=task, md5_hash=yaml_data["hash"]
     )
+    def conversation_factory():
+        return conversation
+    
     prompt_engine = get_prompt_engine(
-        kg_schemas[yaml_data["input"]["kg_schema"]], prompt_engine
+        kg_schemas[yaml_data["input"]["kg_schema"]], prompt_engine, conversation_factory=conversation_factory
     )
 
     def run_test():

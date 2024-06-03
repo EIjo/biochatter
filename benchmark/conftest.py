@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 from xinference.client import Client
 import pytest
@@ -9,7 +10,7 @@ import pandas as pd
 
 from biochatter.prompts import BioCypherPromptEngine
 from benchmark.load_dataset import get_benchmark_dataset
-from biochatter.llm_connect import GptConversation, XinferenceConversation
+from biochatter.llm_connect import GptConversation, XinferenceConversation, AzureGptConversation, Conversation
 from .benchmark_utils import benchmark_already_executed
 
 # how often should each benchmark be run?
@@ -20,154 +21,157 @@ BENCHMARK_DATASET = get_benchmark_dataset()
 
 # which models should be benchmarked?
 OPENAI_MODEL_NAMES = [
-    "gpt-3.5-turbo-0613",
-    "gpt-3.5-turbo-0125",
-    "gpt-4-0613",
-    "gpt-4-0125-preview",
-    "gpt-4o-2024-05-13",
+    # "gpt-3.5-turbo-0613",
+    # "gpt-3.5-turbo-0125",
+    # "gpt-4-0613",
+    # "gpt-4-0125-preview",
+    # "gpt-4o-2024-05-13",
+]
+AZURE_OPENAI_MODEL_NAMES = [
+    "gpt-35-turbo"
 ]
 
 XINFERENCE_MODELS = {
-    "llama-2-chat": {
-        "model_size_in_billions": [
-            7,
-            13,
-            70,
-        ],
-        "model_format": "ggufv2",
-        "quantization": [
-            "Q2_K",
-            # "Q3_K_S",
-            "Q3_K_M",
-            # "Q3_K_L",
-            # "Q4_0",
-            # "Q4_K_S",
-            "Q4_K_M",
-            # "Q5_0",
-            # "Q5_K_S",
-            "Q5_K_M",
-            # "Q6_K",
-            # "Q8_0",
-        ],
-    },
-    "code-llama-instruct": {
-        "model_size_in_billions": [
-            7,
-            # 13,
-            # 34,
-        ],
-        "model_format": "ggufv2",
-        "quantization": [
-            # "Q2_K",
-            # "Q3_K_L",
-            # "Q3_K_M",
-            # "Q3_K_S",
-            # "Q4_0",
-            "Q4_K_M",
-            # "Q4_K_S",
-            # "Q5_0",
-            # "Q5_K_M",
-            # "Q5_K_S",
-            # "Q6_K",
-            # "Q8_0",
-        ],
-    },
-    "mixtral-instruct-v0.1": {
-        "model_size_in_billions": [
-            "46_7",
-        ],
-        "model_format": "ggufv2",
-        "quantization": [
-            "Q2_K",
-            "Q3_K_M",
-            # "Q4_0",
-            "Q4_K_M",
-            # "Q5_0",
-            "Q5_K_M",
-            "Q6_K",
-            "Q8_0",
-        ],
-    },
-    "openhermes-2.5": {
-        "model_size_in_billions": [
-            7,
-        ],
-        "model_format": "ggufv2",
-        "quantization": [
-            "Q2_K",
-            # "Q3_K_S",
-            "Q3_K_M",
-            # "Q3_K_L",
-            # "Q4_0",
-            # "Q4_K_S",
-            "Q4_K_M",
-            # "Q5_0",
-            # "Q5_K_S",
-            "Q5_K_M",
-            "Q6_K",
-            "Q8_0",
-        ],
-    },
-    "chatglm3": {
-        "model_size_in_billions": [
-            6,
-        ],
-        "model_format": "ggmlv3",
-        "quantization": [
-            "q4_0",
-        ],
-    },
-    "mistral-instruct-v0.2": {
-        "model_size_in_billions": [
-            7,
-        ],
-        "model_format": "ggufv2",
-        "quantization": [
-            "Q2_K",
-            # "Q3_K_S",
-            "Q3_K_M",
-            # "Q3_K_L",
-            # "Q4_0",
-            # "Q4_K_S",
-            "Q4_K_M",
-            # "Q5_0",
-            # "Q5_K_S",
-            "Q5_K_M",
-            "Q6_K",
-            "Q8_0",
-        ],
-    },
-    # "gemma-it": {
+    # "llama-2-chat": {
     #     "model_size_in_billions": [
-    #         2,
     #         7,
+    #         13,
+    #         70,
     #     ],
-    #     "model_format": "pytorch",
+    #     "model_format": "ggufv2",
     #     "quantization": [
-    #         "none",
-    #         "4-bit",
-    #         "8-bit",
+    #         "Q2_K",
+    #         # "Q3_K_S",
+    #         "Q3_K_M",
+    #         # "Q3_K_L",
+    #         # "Q4_0",
+    #         # "Q4_K_S",
+    #         "Q4_K_M",
+    #         # "Q5_0",
+    #         # "Q5_K_S",
+    #         "Q5_K_M",
+    #         # "Q6_K",
+    #         # "Q8_0",
     #     ],
     # },
-    "llama-3-instruct": {
-        "model_size_in_billions": [
-            8,
-            # 70,
-        ],
-        "model_format": "ggufv2",
-        "quantization": [
-            # 8B model quantisations
-            # "IQ3_M",
-            "Q4_K_M",
-            "Q5_K_M",
-            "Q6_K",
-            "Q8_0",
-            # 70B model quantisations
-            # "IQ1_M",
-            # "IQ2_XS",
-            # "Q4_K_M",
-        ],
-    },
+    # "code-llama-instruct": {
+    #     "model_size_in_billions": [
+    #         7,
+    #         # 13,
+    #         # 34,
+    #     ],
+    #     "model_format": "ggufv2",
+    #     "quantization": [
+    #         # "Q2_K",
+    #         # "Q3_K_L",
+    #         # "Q3_K_M",
+    #         # "Q3_K_S",
+    #         # "Q4_0",
+    #         "Q4_K_M",
+    #         # "Q4_K_S",
+    #         # "Q5_0",
+    #         # "Q5_K_M",
+    #         # "Q5_K_S",
+    #         # "Q6_K",
+    #         # "Q8_0",
+    #     ],
+    # },
+    # "mixtral-instruct-v0.1": {
+    #     "model_size_in_billions": [
+    #         "46_7",
+    #     ],
+    #     "model_format": "ggufv2",
+    #     "quantization": [
+    #         "Q2_K",
+    #         "Q3_K_M",
+    #         # "Q4_0",
+    #         "Q4_K_M",
+    #         # "Q5_0",
+    #         "Q5_K_M",
+    #         "Q6_K",
+    #         "Q8_0",
+    #     ],
+    # },
+    # "openhermes-2.5": {
+    #     "model_size_in_billions": [
+    #         7,
+    #     ],
+    #     "model_format": "ggufv2",
+    #     "quantization": [
+    #         "Q2_K",
+    #         # "Q3_K_S",
+    #         "Q3_K_M",
+    #         # "Q3_K_L",
+    #         # "Q4_0",
+    #         # "Q4_K_S",
+    #         "Q4_K_M",
+    #         # "Q5_0",
+    #         # "Q5_K_S",
+    #         "Q5_K_M",
+    #         "Q6_K",
+    #         "Q8_0",
+    #     ],
+    # },
+    # "chatglm3": {
+    #     "model_size_in_billions": [
+    #         6,
+    #     ],
+    #     "model_format": "ggmlv3",
+    #     "quantization": [
+    #         "q4_0",
+    #     ],
+    # },
+    # "mistral-instruct-v0.2": {
+    #     "model_size_in_billions": [
+    #         7,
+    #     ],
+    #     "model_format": "ggufv2",
+    #     "quantization": [
+    #         "Q2_K",
+    #         # "Q3_K_S",
+    #         "Q3_K_M",
+    #         # "Q3_K_L",
+    #         # "Q4_0",
+    #         # "Q4_K_S",
+    #         "Q4_K_M",
+    #         # "Q5_0",
+    #         # "Q5_K_S",
+    #         "Q5_K_M",
+    #         "Q6_K",
+    #         "Q8_0",
+    #     ],
+    # },
+    # # "gemma-it": {
+    # #     "model_size_in_billions": [
+    # #         2,
+    # #         7,
+    # #     ],
+    # #     "model_format": "pytorch",
+    # #     "quantization": [
+    # #         "none",
+    # #         "4-bit",
+    # #         "8-bit",
+    # #     ],
+    # # },
+    # "llama-3-instruct": {
+    #     "model_size_in_billions": [
+    #         8,
+    #         # 70,
+    #     ],
+    #     "model_format": "ggufv2",
+    #     "quantization": [
+    #         # 8B model quantisations
+    #         # "IQ3_M",
+    #         "Q4_K_M",
+    #         "Q5_K_M",
+    #         "Q6_K",
+    #         "Q8_0",
+    #         # 70B model quantisations
+    #         # "IQ1_M",
+    #         # "IQ2_XS",
+    #         # "Q4_K_M",
+    #     ],
+    # },
 }
 
 # create concrete benchmark list by concatenating all combinations of model
@@ -180,7 +184,7 @@ XINFERENCE_MODEL_NAMES = [
     for quantization in XINFERENCE_MODELS[model_name]["quantization"]
 ]
 
-BENCHMARKED_MODELS = OPENAI_MODEL_NAMES + XINFERENCE_MODEL_NAMES
+BENCHMARKED_MODELS = OPENAI_MODEL_NAMES + XINFERENCE_MODEL_NAMES + AZURE_OPENAI_MODEL_NAMES
 BENCHMARKED_MODELS.sort()
 
 # Xinference IP and port
@@ -232,15 +236,16 @@ def calculate_bool_vector_score(vector: list[bool]) -> tuple[int, int]:
 
 
 @pytest.fixture
-def prompt_engine(request, model_name):
+def prompt_engine(request, model_name, conversation_factory: Optional[Conversation] = None):
     """
     Generates a constructor for the prompt engine for the current model name.
     """
 
-    def setup_prompt_engine(kg_schema_dict):
+    def setup_prompt_engine(kg_schema_dict, conversation_factory: Optional[Conversation] = None):
         return BioCypherPromptEngine(
             schema_config_or_info_dict=kg_schema_dict,
             model_name=model_name,
+            conversation_factory=conversation_factory
         )
 
     return setup_prompt_engine
@@ -260,7 +265,17 @@ def conversation(request, model_name):
         # pytest.skip(
         #     f"benchmark {test_name}: {subtask} with {model_name} already executed"
         # )
-
+    if model_name in AZURE_OPENAI_MODEL_NAMES:
+        conversation = AzureGptConversation(
+            model_name=model_name, 
+            deployment_name=os.getenv("OPENAI_DEPLOYMENT_NAME"),
+            version=os.getenv("AZURE_OPENAI_API_VERSION"),
+            prompts={},
+            correct=False,
+        )
+        conversation.set_api_key(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"), user="benchmark_user"
+        )
     if model_name in OPENAI_MODEL_NAMES:
         conversation = GptConversation(
             model_name=model_name,
