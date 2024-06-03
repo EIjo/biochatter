@@ -1,7 +1,9 @@
 import neo4j_utils as nu
 import yaml
 import sys
-from biochatter.prompts import AzureBioCypherPromptEngine
+import os
+from biochatter.prompts import BioCypherPromptEngine
+from biochatter.llm_connect import AzureGptConversation
 
 from dotenv import load_dotenv
 import json
@@ -22,7 +24,7 @@ SCHEMA_FILE = "C:/Pistoia/BioCypher-OT/config/schema_config.yaml"
 # MODEL_NAME = 'gpt-4-turbo'
 DEPLOYMENT_NAME = 'gpt-35-turbo'
 MODEL_NAME = 'gpt-35-turbo'
-
+VERSION = '2023-12-01-preview'
 
 neodriver = nu.Driver(
         db_name=DB_NAME or "neo4j",
@@ -46,13 +48,30 @@ for e in gold_result:
 
 with open(SCHEMA_FILE) as file:
     schema_dict = yaml.safe_load(file)
+    
+def conversation_factory():
+    conversation = AzureGptConversation(
+        model_name=MODEL_NAME, 
+        deployment_name=DEPLOYMENT_NAME,
+        version=VERSION,
+        prompts={},
+        correct=False,
+    )
+    conversation.set_api_key(
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"), user="test_user"
+    )
+    return conversation
 
+# prompt_engine = AzureBioCypherPromptEngine(
+#     schema_config_or_info_dict=schema_dict,
+#     model_name=MODEL_NAME,
+#     deployment_name=DEPLOYMENT_NAME
+#                                       )
 
-
-prompt_engine = AzureBioCypherPromptEngine(
+prompt_engine = BioCypherPromptEngine(
     schema_config_or_info_dict=schema_dict,
     model_name=MODEL_NAME,
-    deployment_name=DEPLOYMENT_NAME,
+    conversation_factory=conversation_factory
                                       )
 
 query = prompt_engine.generate_query(question, 'Neo4j')
