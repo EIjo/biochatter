@@ -1,6 +1,9 @@
 import neo4j_utils as nu
 import yaml
-from biochatter.prompts import BioCypherPromptEngine
+import sys
+from biochatter.prompts import AzureBioCypherPromptEngine
+
+from dotenv import load_dotenv
 import json
 
 def jaccard_similarity(list1, list2):
@@ -8,16 +11,17 @@ def jaccard_similarity(list1, list2):
     s2 = set(list2)
     return float(len(s1.intersection(s2)) / len(s1.union(s2)))
 
+load_dotenv()
 
 URI = "bolt://localhost:7687"
 DB_NAME = None
 AUTH = None
 SCHEMA_FILE = "C:/Pistoia/BioCypher-OT/config/schema_config.yaml"
 
-DEPLOYMENT_NAME = 'gpt-4-turbo'
-MODEL_NAME = 'gpt-4-turbo'
-# DEPLOYMENT_NAME = 'gpt-35-turbo'
-# MODEL_NAME = 'gpt-35-turbo'
+# DEPLOYMENT_NAME = 'gpt-4-turbo'
+# MODEL_NAME = 'gpt-4-turbo'
+DEPLOYMENT_NAME = 'gpt-35-turbo'
+MODEL_NAME = 'gpt-35-turbo'
 
 
 neodriver = nu.Driver(
@@ -45,7 +49,7 @@ with open(SCHEMA_FILE) as file:
 
 
 
-prompt_engine = BioCypherPromptEngine(
+prompt_engine = AzureBioCypherPromptEngine(
     schema_config_or_info_dict=schema_dict,
     model_name=MODEL_NAME,
     deployment_name=DEPLOYMENT_NAME,
