@@ -13,7 +13,6 @@ def jaccard_similarity(list1, list2):
     s2 = set(list2)
     return float(len(s1.intersection(s2)) / len(s1.union(s2)))
 
-load_dotenv()
 
 URI = "bolt://localhost:7687"
 DB_NAME = None
