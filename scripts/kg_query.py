@@ -2,8 +2,8 @@ import neo4j_utils as nu
 import yaml
 import sys
 import os
-from biochatter.prompts import BioCypherPromptEngine
-from biochatter.llm_connect import AzureGptConversation
+from biochatter.prompts import BioCypherPromptEngine, BioCypherPromptEngineV2
+from biochatter.llm_connect import AzureGptConversation, VertexConversation
 
 from dotenv import load_dotenv
 import json
@@ -47,33 +47,55 @@ for e in gold_result:
 
 with open(SCHEMA_FILE) as file:
     schema_dict = yaml.safe_load(file)
-    
+
+with open(SCHEMA_FILE) as file:
+    schema_text = file.readlines()
+
 def conversation_factory():
-    conversation = AzureGptConversation(
-        model_name=MODEL_NAME, 
-        deployment_name=DEPLOYMENT_NAME,
-        version=VERSION,
+    conversation = VertexConversation(
+        model_name='gemini-1.5-flash', 
         prompts={},
-        correct=False,
     )
-    conversation.set_api_key(
-        api_key=os.getenv("AZURE_OPENAI_API_KEY"), user="test_user"
-    )
+    conversation.set_api_key()
     return conversation
+
+test = conversation_factory()
+
+# def conversation_factory():
+#     conversation = AzureGptConversation(
+#         model_name=MODEL_NAME, 
+#         deployment_name=DEPLOYMENT_NAME,
+#         version=VERSION,
+#         prompts={},
+#         correct=False,
+#     )
+#     conversation.set_api_key(
+#         api_key=os.getenv("AZURE_OPENAI_API_KEY"), user="test_user"
+#     )
+#     return conversation
 
 # prompt_engine = AzureBioCypherPromptEngine(
 #     schema_config_or_info_dict=schema_dict,
 #     model_name=MODEL_NAME,
 #     deployment_name=DEPLOYMENT_NAME
 #                                       )
+# prompt_engine = BioCypherPromptEngine(
+#     schema_config_or_info_dict=schema_dict,
+#     model_name=MODEL_NAME,
+#     conversation_factory=conversation_factory
+#                                       )
 
-prompt_engine = BioCypherPromptEngine(
-    schema_config_or_info_dict=schema_dict,
+prompt_engine = BioCypherPromptEngineV2(
+    schema_text=schema_text,
     model_name=MODEL_NAME,
     conversation_factory=conversation_factory
                                       )
 
 query = prompt_engine.generate_query(question, 'Neo4j')
+
+print(query)
+query = query.replace('```cypher', '')
+query = query.replace('```', '')
 
 llm_result = neodriver.query(query)[0]
 

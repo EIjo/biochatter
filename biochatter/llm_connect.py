@@ -15,9 +15,11 @@ from typing import Optional
 import json
 import logging
 
-from langchain.llms import HuggingFaceHub
+from langchain_community.llms import HuggingFaceHub
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langchain.chat_models import ChatOpenAI, AzureChatOpenAI
+from langchain_google_vertexai import ChatVertexAI, HarmBlockThreshold, HarmCategory
+
 import nltk
 import openai
 
@@ -1060,3 +1062,147 @@ class BloomConversation(Conversation):
 
     def _correct_response(self, msg: str):
         return "ok"
+
+class VertexConversation(Conversation):
+    def __init__(
+        self,
+        model_name: str,
+        prompts: dict,
+        correct: bool = True,
+        split_correction: bool = False,
+    ):
+        """
+        Connect to VertexAI's API and set up a conversation with the user.
+        Also initialise a second conversational agent to provide corrections to
+        the model output, if necessary.
+
+        Args:
+            model_name (str): The name of the model to use.
+
+            prompts (dict): A dictionary of prompts to use for the conversation.
+
+            split_correction (bool): Whether to correct the model output by
+                splitting the output into sentences and correcting each
+                sentence individually.
+        """
+        super().__init__(
+            model_name=model_name,
+            prompts=prompts,
+            correct=correct,
+            split_correction=split_correction,
+        )
+
+        self.ca_model_name = "gemini-pro"
+        # TODO make accessible by drop-down
+
+    def set_api_key(self, user: Optional[str] = None):
+        """
+        Set up the connection for the VertexAI API using gcloud. This authentication
+        should be initialised using gcloud with a working VertexAI workspace. As such
+        no api key is required, but we keep the method name to keep a consitent naming
+        scheme. 
+
+        Args:
+            user (str): The user for usage statistics.
+
+        Returns:
+            bool: True if the API key is valid, False otherwise.
+        """
+        safety_settings = {
+            HarmCategory.HARM_CATEGORY_UNSPECIFIED: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        }
+        
+        self.chat = ChatVertexAI(
+            model_name=self.model_name,
+            temperature=0,
+            safety_settings=safety_settings
+        )
+        self.ca_chat = ChatVertexAI(
+            model_name=self.ca_model_name,
+            temperature=0,
+            safety_settings=safety_settings
+        )
+
+        return True
+
+
+    def _primary_query(self):
+        """
+        Query the OpenAI API with the user's message and return the response
+        using the message history (flattery system messages, prior conversation)
+        as context. Correct the response if necessary.
+
+        Returns:
+            tuple: A tuple containing the response from the OpenAI API and the
+                token usage.
+        """
+        try:
+            response = self.chat.generate([self.messages])
+        except (
+            Exception
+            #TODO add vertexai exceptions
+        ) as e:
+            return str(e), None
+
+        msg = response.generations[0][0].text
+        token_usage = response.llm_output.get("token_usage")
+
+        self._update_usage_stats(self.model_name, token_usage)
+
+        self.append_ai_message(msg)
+
+        return msg, token_usage
+
+    def _correct_response(self, msg: str):
+        """
+        Correct the response from the OpenAI API by sending it to a secondary
+        language model. Optionally split the response into single sentences and
+        correct each sentence individually. Update usage stats.
+
+        Args:
+            msg (str): The response from the OpenAI API.
+
+        Returns:
+            str: The corrected response (or OK if no correction necessary).
+        """
+        ca_messages = self.ca_messages.copy()
+        ca_messages.append(
+            HumanMessage(
+                content=msg,
+            ),
+        )
+        ca_messages.append(
+            SystemMessage(
+                content="If there is nothing to correct, please respond "
+                "with just 'OK', and nothing else!",
+            ),
+        )
+
+        response = self.ca_chat.generate([ca_messages])
+
+        correction = response.generations[0][0].text
+        token_usage = response.llm_output.get("token_usage")
+
+        self._update_usage_stats(self.ca_model_name, token_usage)
+
+        return correction
+
+    def _update_usage_stats(self, model: str, token_usage: dict):
+        """
+        Update redis database with token usage statistics using the usage_stats
+        object with the increment method.
+
+        Args:
+            model (str): The model name.
+
+            token_usage (dict): The token usage statistics.
+        """
+        # if self.user == "community":
+        #     self.usage_stats.increment(
+        #         f"usage:[date]:[user]",
+        #         {f"{k}:{model}": v for k, v in token_usage.items()},
+        #     )
