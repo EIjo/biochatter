@@ -16,8 +16,8 @@ import json
 import logging
 
 from langchain_community.llms import HuggingFaceHub
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
-from langchain.chat_models import ChatOpenAI, AzureChatOpenAI
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_community.chat_models import ChatOpenAI, AzureChatOpenAI
 from langchain_google_vertexai import ChatVertexAI, HarmBlockThreshold, HarmCategory
 
 import nltk
