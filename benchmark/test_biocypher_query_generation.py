@@ -6,9 +6,9 @@ import pytest
 from typing import Optional
 
 from biochatter.llm_connect import Conversation
-from biochatter.prompts import BioCypherPromptEngine
-from .conftest import calculate_bool_vector_score
-from .benchmark_utils import (
+from biochatter.prompts import BioCypherPromptEngine, BioCypherPromptEngineV2
+from conftest import calculate_bool_vector_score
+from benchmark_utils import (
     skip_if_already_run,
     get_result_file_path,
     write_results_to_file,
@@ -85,6 +85,22 @@ def get_prompt_engine(
         BioCypherPromptEngine: The prompt engine for the test
     """
     return create_prompt_engine(kg_schema_dict=kg_schema_dict,conversation_factory=conversation_factory)
+
+def get_prompt_engine_v2(
+    kg_schema: str,
+    create_prompt_engine_v2,
+    conversation_factory: Optional[Conversation] = None
+) -> BioCypherPromptEngineV2:
+    """Helper function to create the prompt engine for the test.
+
+    Args:
+        kg_schema_dict (dict): The KG schema
+        create_prompt_engine: The function to create the BioCypherPromptEngine
+
+    Returns:
+        BioCypherPromptEngine: The prompt engine for the test
+    """
+    return create_prompt_engine_v2(kg_schema=kg_schema,conversation_factory=conversation_factory)
 
 
 def test_entity_selection(
@@ -377,6 +393,64 @@ def test_end_to_end_query_generation(
     )
 
 
+def test_end_to_end_query_generation_v2(
+    model_name,
+    prompt_engine_v2,
+    test_data_biocypher_query_generation,
+    kg_text,
+    conversation,
+    multiple_testing,
+):
+    yaml_data = test_data_biocypher_query_generation
+    task = f"{inspect.currentframe().f_code.co_name.replace('test_', '')}"
+    # skip_if_already_run(
+    #     model_name=model_name, task=task, md5_hash=yaml_data["hash"]
+    # )
+    def conversation_factory():
+        return conversation
+    prompt_engine = get_prompt_engine_v2(
+        kg_text, prompt_engine_v2, conversation_factory=conversation_factory
+    )
+
+    def run_test():
+        conversation.reset()  # needs to be reset for each test
+        if yaml_data['case'] == 'complex':
+            print('yep')
+        try:
+            query = prompt_engine.generate_query(
+                question=yaml_data["input"]["prompt"],
+                query_language="Cypher",
+            )
+            score = []
+            for expected_part_of_query in yaml_data["expected"][
+                "parts_of_query"
+            ]:
+                if isinstance(expected_part_of_query, tuple):
+                    score.append(
+                        expected_part_of_query[0] in query
+                        or expected_part_of_query[1] in query
+                    )
+                else:
+                    score.append(
+                        (re.search(expected_part_of_query, query) is not None)
+                    )
+        except ValueError as e:
+            score = [False for _ in yaml_data["expected"]["parts_of_query"]]
+
+        return calculate_bool_vector_score(score)
+
+    mean_score, max, n_iterations = multiple_testing(run_test)
+
+    write_results_to_file(
+        prompt_engine.model_name,
+        yaml_data["case"],
+        f"{mean_score}/{max}",
+        f"{n_iterations}",
+        yaml_data["hash"],
+        get_result_file_path(task),
+    )
+
+
 ######
 # test hallucination: are all properties available in the KG schema?
 # in selected properties, also in the actual property used in the query
@@ -551,3 +625,7 @@ def test_regex(test_data_biocypher_query_generation):
             score.append((re.search(expected_part_of_query, query) is not None))
 
         assert True
+
+
+if __name__ == "__main__":
+    pytest.main(["benchmark/test_biocypher_query_generation.py", "-s"])

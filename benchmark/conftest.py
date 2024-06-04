@@ -5,13 +5,14 @@ from xinference.client import Client
 import pytest
 import requests
 
+import yaml
 import numpy as np
 import pandas as pd
 
-from biochatter.prompts import BioCypherPromptEngine
+from biochatter.prompts import BioCypherPromptEngine, BioCypherPromptEngineV2
 from benchmark.load_dataset import get_benchmark_dataset
-from biochatter.llm_connect import GptConversation, XinferenceConversation, AzureGptConversation, Conversation
-from .benchmark_utils import benchmark_already_executed
+from biochatter.llm_connect import GptConversation, XinferenceConversation, AzureGptConversation, Conversation, VertexConversation
+from benchmark_utils import benchmark_already_executed
 
 # how often should each benchmark be run?
 N_ITERATIONS = 5
@@ -29,6 +30,9 @@ OPENAI_MODEL_NAMES = [
 ]
 AZURE_OPENAI_MODEL_NAMES = [
     "gpt-35-turbo"
+]
+VERTEX_AI_MODEL_NAMES = [
+    "gemini-1.5-flash"
 ]
 
 XINFERENCE_MODELS = {
@@ -184,7 +188,7 @@ XINFERENCE_MODEL_NAMES = [
     for quantization in XINFERENCE_MODELS[model_name]["quantization"]
 ]
 
-BENCHMARKED_MODELS = OPENAI_MODEL_NAMES + XINFERENCE_MODEL_NAMES + AZURE_OPENAI_MODEL_NAMES
+BENCHMARKED_MODELS = OPENAI_MODEL_NAMES + XINFERENCE_MODEL_NAMES + AZURE_OPENAI_MODEL_NAMES + VERTEX_AI_MODEL_NAMES
 BENCHMARKED_MODELS.sort()
 
 # Xinference IP and port
@@ -250,6 +254,20 @@ def prompt_engine(request, model_name, conversation_factory: Optional[Conversati
 
     return setup_prompt_engine
 
+@pytest.fixture
+def prompt_engine_v2(request, model_name, conversation_factory: Optional[Conversation] = None):
+    """
+    Generates a constructor for the prompt engine for the current model name.
+    """
+
+    def setup_prompt_engine(kg_schema, conversation_factory: Optional[Conversation] = None):
+        return BioCypherPromptEngineV2(
+            schema_text=kg_schema,
+            model_name=model_name,
+            conversation_factory=conversation_factory
+        )
+
+    return setup_prompt_engine
 
 @pytest.fixture
 def conversation(request, model_name):
@@ -276,7 +294,15 @@ def conversation(request, model_name):
         conversation.set_api_key(
             api_key=os.getenv("AZURE_OPENAI_API_KEY"), user="benchmark_user"
         )
-    if model_name in OPENAI_MODEL_NAMES:
+    elif model_name in VERTEX_AI_MODEL_NAMES:
+        conversation = VertexConversation(
+            model_name=model_name,
+            prompts={},
+            correct=False,
+        )
+        conversation.set_api_key()
+
+    elif model_name in OPENAI_MODEL_NAMES:
         conversation = GptConversation(
             model_name=model_name,
             prompts={},
@@ -451,3 +477,8 @@ def pytest_generate_tests(metafunc):
 def kg_schemas():
     data_file = BENCHMARK_DATASET["benchmark_data.yaml"]
     return data_file["kg_schemas"]
+
+@pytest.fixture
+def kg_text():
+    data_file = BENCHMARK_DATASET["kg_schema.yaml"]
+    return yaml.dump(data_file)
